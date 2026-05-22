@@ -1,0 +1,124 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>py_chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body class="min-h-screen bg-[hsl(232,15%,10%)] text-white">
+    <div class="max-w-6xl mx-auto px-6 py-8">
+      <div class="flex items-center justify-between mb-10">
+        <div class="flex items-center gap-4">
+          <img src="{% static 'assets/fox-p.png' %}" alt="logo" class="h-12 w-auto rounded-lg" />
+          <h1 class="text-2xl font-bold">py_chat</h1>
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="text-gray-400">Welcome, <span class="text-white font-medium">{{ request.user.username }}</span></span>
+          <a href="{% url 'logout' %}" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Logout</a>
+        </div>
+      </div>
+
+      {% if pending_requests %}
+      <div class="mb-10">
+        <h2 class="text-2xl font-bold mb-4">Pending Friend Requests</h2>
+        <div class="space-y-3">
+          {% for req in pending_requests %}
+          <div class="bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-xl p-4 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <img src="https://api.dicebear.com/7.x/thumbs/svg?seed={{ req.sender.username }}" alt="{{ req.sender.username }}" class="h-12 w-12 rounded-lg" />
+              <span class="text-lg font-medium">{{ req.sender.username }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <button onclick="acceptRequest({{ req.id }})" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Accept</button>
+              <button onclick="rejectRequest({{ req.id }})" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Reject</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <h2 class="text-3xl font-bold mb-2">Find People</h2>
+      <p class="text-gray-400 mb-4">Send friend requests to start chatting</p>
+
+      <input id="user-search" type="text" placeholder="Search users..." autocomplete="off" class="w-full p-3 mb-6 bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-lg text-white outline-none focus:border-blue-500 transition" oninput="filterUsers()" />
+
+      <div id="user-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {% for user in users %}
+          <div class="user-card bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-2xl p-6 hover:border-blue-500/30 transition-all duration-300" data-username="{{ user.username|lower }}">
+            <div class="flex flex-col items-center text-center">
+              <img src="https://api.dicebear.com/7.x/thumbs/svg?seed={{ user.username }}" alt="{{ user.username }}" class="h-20 w-20 rounded-xl mb-4 shadow-lg" />
+              <h3 class="text-lg font-semibold">{{ user.username }}</h3>
+              <span class="text-sm {% if user.is_active %}text-green-400{% else %}text-gray-500{% endif %} mt-1">
+                {% if user.is_active %}● Online{% else %}○ Offline{% endif %}
+              </span>
+
+              <div class="mt-4 w-full">
+                {% if user.friend_status == 'accepted' %}
+                  <a href="{% url 'chat' user.id %}" class="block w-full bg-blue-600 hover:bg-blue-700 text-center py-2 rounded-lg text-sm font-medium transition-colors duration-300 mb-2">Chat</a>
+                  <button onclick="unfriend({{ user.id }})" class="w-full bg-red-600/20 hover:bg-red-600/40 text-red-400 py-2 rounded-lg text-sm transition-colors duration-300">Unfriend</button>
+                {% elif user.friend_status == 'sent_pending' %}
+                  <span class="block w-full bg-yellow-600/30 text-yellow-400 text-center py-2 rounded-lg text-sm font-medium">Request Sent</span>
+                {% elif user.friend_status == 'received_pending' %}
+                  <button onclick="acceptRequest({{ user.request_id }})" class="w-full bg-green-600 hover:bg-green-700 text-center py-2 rounded-lg text-sm font-medium transition-colors duration-300">Accept Request</button>
+                {% else %}
+                  <button onclick="sendRequest({{ user.id }})" class="w-full bg-blue-600 hover:bg-blue-700 text-center py-2 rounded-lg text-sm font-medium transition-colors duration-300">Add Friend</button>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="col-span-full text-center py-20" id="no-users-msg">
+            <p class="text-gray-500 text-lg">No other users found.</p>
+          </div>
+        {% endfor %}
+        <div class="col-span-full text-center py-20 hidden" id="no-search-results">
+          <p class="text-gray-500 text-lg">No users match your search.</p>
+        </div>
+      </div>
+    </div>
+
+    {% if messages %}
+    <div class="fixed top-4 right-4 z-50 space-y-2">
+      {% for message in messages %}
+        <div class="px-4 py-3 rounded-lg text-sm shadow-lg {% if message.tags == 'error' %}bg-red-600 text-white{% else %}bg-green-600 text-white{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <script>
+      function filterUsers() {
+        const q = document.getElementById('user-search').value.toLowerCase();
+        let visible = 0;
+        document.querySelectorAll('.user-card').forEach(card => {
+          const match = card.dataset.username.includes(q);
+          card.classList.toggle('hidden', !match);
+          if (match) visible++;
+        });
+        document.getElementById('no-search-results').classList.toggle('hidden', visible > 0 || !q);
+      }
+
+      function sendRequest(userId) {
+        fetch("{% url 'send_friend_request' 0 %}".replace('/0/', '/' + userId + '/'), { method: "POST", headers: { "X-CSRFToken": "{{ csrf_token }}" } })
+          .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
+      }
+      function acceptRequest(reqId) {
+        fetch("{% url 'accept_friend_request' 0 %}".replace('/0/', '/' + reqId + '/'), { method: "POST", headers: { "X-CSRFToken": "{{ csrf_token }}" } })
+          .then(r => r.json()).then(d => { if (d.success) location.reload(); });
+      }
+      function rejectRequest(reqId) {
+        fetch("{% url 'reject_friend_request' 0 %}".replace('/0/', '/' + reqId + '/'), { method: "POST", headers: { "X-CSRFToken": "{{ csrf_token }}" } })
+          .then(r => r.json()).then(d => { if (d.success) location.reload(); });
+      }
+      function unfriend(userId) {
+        if (!confirm("Unfriend this user?")) return;
+        fetch("{% url 'unfriend' 0 %}".replace('/0/', '/' + userId + '/'), { method: "POST", headers: { "X-CSRFToken": "{{ csrf_token }}" } })
+          .then(r => r.json()).then(d => { if (d.success) location.reload(); });
+      }
+    </script>
+  </body>
+</html>

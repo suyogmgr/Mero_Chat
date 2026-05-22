@@ -1,0 +1,35 @@
+{% extends 'auth/base.html' %}
+
+{% block auth_title %}Sign In - MeroChat{% endblock %}
+
+{% block form_header %}Welcome Back{% endblock %}
+
+{% block auth_content %}
+    <div>
+        <label for="username" class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+        <input type="text" name="username" id="username" required
+               class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition">
+    </div>
+
+    <div>
+        <label for="password" class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+        <input type="password" name="password" id="password" required
+               class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition">
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400 border border-red-500/30{% else %}bg-green-500/20 text-green-400 border border-green-500/30{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endblock %}
+
+{% block button_text %}Sign In{% endblock %}
+
+{% block auth_footer %}
+    Don't have an account? 
+    <a href="{% url 'register' %}" class="text-blue-400 hover:text-blue-300 font-medium transition">Create one</a>
+</div>
+{% endblock %}
