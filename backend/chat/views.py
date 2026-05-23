@@ -142,6 +142,16 @@ def delete_chat(request, user_id):
     return JsonResponse({'success': 'Chat deleted'})
 
 
+@login_required(login_url='login')
+def delete_message(request, message_id):
+    msg = get_object_or_404(ChatMessage, id=message_id)
+    room_users = msg.room_name.split('_')
+    if request.user.username not in room_users:
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    msg.delete()
+    return JsonResponse({'success': 'Message deleted'})
+
+
 def register_view(request):
     if request.method == "POST":
         username = request.POST.get("username")

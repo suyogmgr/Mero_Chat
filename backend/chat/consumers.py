@@ -65,17 +65,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 await self.handle_stop_typing(data)
             elif msg_type == 'read_receipt':
                 await self.handle_read_receipt(data)
+            elif msg_type == 'delete_message':
+                await self.handle_delete_message(data)
         except Exception as e:
             print(f"Error in receive: {e}")
 
     async def handle_message(self, data):
         message = data.get('message', '').strip()
-        if not message or len(message) > 1000:
+        if not message or len(message) > 5000000:
             await self.send(text_data=json.dumps({'error': 'Invalid message'}))
             return
 
         timestamp = datetime.now().isoformat()
-        await self.save_message(self.username, self.room_name, message)
+        msg_id = await self.save_message(self.username, self.room_name, message)
 
         await self.channel_layer.group_send(
             self.room_group_name, {
@@ -83,8 +85,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'message': message,
                 'username': self.username,
                 'timestamp': timestamp,
+                'msg_id': msg_id,
             }
         )
+
+    async def handle_delete_message(self, data):
+        msg_id = data.get('msg_id')
+        if not msg_id:
+            return
+        deleted = await self.delete_message_db(msg_id, self.username)
+        if deleted:
+            await self.channel_layer.group_send(
+                self.room_group_name, {
+                    'type': 'delete_message',
+                    'msg_id': msg_id,
+                }
+            )
 
     async def handle_typing(self, data):
         await self.channel_layer.group_send(
@@ -116,6 +132,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'message': event['message'],
             'username': event['username'],
             'timestamp': event.get('timestamp'),
+            'msg_id': event.get('msg_id'),
+        }))
+
+    async def delete_message(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'delete_message',
+            'msg_id': event['msg_id'],
         }))
 
     async def typing_indicator(self, event):
@@ -147,9 +170,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def save_message(self, username, room, message):
         try:
             user = User.objects.get(username=username)
-            ChatMessage.objects.create(sender=user, room_name=room, content=message)
-            return True
+            msg = ChatMessage.objects.create(sender=user, room_name=room, content=message)
+            return msg.id
         except User.DoesNotExist:
+            return None
+
+    @sync_to_async
+    def delete_message_db(self, msg_id, username):
+        try:
+            msg = ChatMessage.objects.get(id=msg_id)
+            users = msg.room_name.split('_')
+            if username not in users:
+                return False
+            msg.delete()
+            return True
+        except ChatMessage.DoesNotExist:
             return False
 
     @sync_to_async
@@ -160,6 +195,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         return [
             {
+                'id': msg.id,
                 'message': msg.content,
                 'username': msg.sender.username,
                 'timestamp': msg.timestamp.isoformat()

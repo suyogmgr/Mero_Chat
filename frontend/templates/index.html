@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>py_chat</title>
+    <link rel="icon" type="image/png" href="{% static 'assets/image.png' %}">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
       @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -40,7 +41,7 @@
     <aside class="min-h-screen w-[25%] bg-[hsl(231,16%,9%)] text-white flex flex-col border-r-2 border-[hsl(230,9%,14%)]">
       <div class="aside-top flex justify-between items-center px-6 py-4">
         <div class="logo">
-          <img src="{% static 'assets/fox-p.png' %}" alt="logo" class="h-12 w-auto rounded-lg" />
+          <img src="{% static 'assets/image.png' %}" alt="logo" class="h-12 w-auto rounded-lg" />
         </div>
         <div class="border border-[hsl(230,9%,14%)] p-2 rounded-md shadow-2xl hover:bg-[hsl(234,15%,15%)] transition-colors duration-300">
           <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
@@ -104,7 +105,7 @@
               <path d="M360-320h80v-120h120v-80H440v-120h-80v120H240v80h120v120ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h480q33 0 56.5 23.5T720-720v180l160-160v440L720-420v180q0 33-23.5 56.5T640-160H160Zm0-80h480v-480H160v480Zm0 0v-480 480Z"/>
             </svg>
           </div>
-          <div class="bg-[hsl(234,15%,13%)] rounded-lg p-2 shadow-2xl hover:bg-[hsl(234,15%,15%)] transition-colors duration-300">
+          <div id="search-msg-btn" class="bg-[hsl(234,15%,13%)] rounded-lg p-2 shadow-2xl hover:bg-[hsl(234,15%,15%)] transition-colors duration-300 cursor-pointer">
             <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
               <path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/>
             </svg>
@@ -114,6 +115,16 @@
               <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/>
             </svg>
           </div>
+        </div>
+      </div>
+
+      <div id="msg-search-bar" class="hidden px-3 py-2 border-b border-[hsl(230,9%,14%)]">
+        <div class="flex items-center gap-2 bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-lg px-3 py-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="#9ca3af">
+            <path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/>
+          </svg>
+          <input id="msg-search-input" type="text" placeholder="Search messages..." autocomplete="off" class="outline-0 w-full text-sm bg-transparent text-white" oninput="searchMessages(this.value)" />
+          <span id="search-count" class="text-xs text-gray-500 shrink-0"></span>
         </div>
       </div>
 
@@ -130,10 +141,11 @@
       <div id="typing-indicator" class="hidden px-4 py-1"></div>
 
       <div class="flex items-center justify-center p-4 bg-[hsl(234,15%,13%)] space-x-4 m-5 rounded-[15px] border-2 border-[hsl(230,9%,14%)]">
-        <div>
-          <svg class="bg-[hsl(234,15%,13%)] rounded-lg shadow-2xl" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
+        <div id="attach-btn" class="cursor-pointer relative">
+          <svg class="bg-[hsl(234,15%,13%)] rounded-lg shadow-2xl pointer-events-none" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
             <path d="M720-330q0 104-73 177T470-80q-104 0-177-73t-73-177v-370q0-75 52.5-127.5T400-880q75 0 127.5 52.5T580-700v350q0 46-32 78t-78 32q-46 0-78-32t-32-78v-370h80v370q0 13 8.5 21.5T470-320q13 0 21.5-8.5T500-350v-350q-1-42-29.5-71T400-800q-42 0-71 29t-29 71v370q-1 71 49 120.5T470-160q70 0 119-49.5T640-330v-390h80v390Z"/>
           </svg>
+          <input id="file-input" type="file" accept="image/*" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer">
         </div>
         <input id="msg-input" class="outline-0 p-2 w-full" type="text" placeholder="Write a message..." class="flex-1" autocomplete="off" />
         <div id="emoji-btn" class="relative cursor-pointer">
@@ -149,5 +161,21 @@
         </div>
       </div>
     </main>
+
+    <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div class="bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+        <div class="flex items-center gap-3 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" height="28px" viewBox="0 -960 960 960" width="28px" fill="#ef4444">
+            <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/>
+          </svg>
+          <h3 class="text-lg font-semibold text-white">Delete Chat</h3>
+        </div>
+        <p class="text-gray-300 text-sm mb-6" id="confirm-msg">Are you sure you want to delete all messages?</p>
+        <div class="flex gap-3 justify-end">
+          <button id="confirm-cancel" class="px-4 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 text-white transition-colors">Cancel</button>
+          <button id="confirm-ok" class="px-4 py-2 rounded-lg text-sm bg-red-600 hover:bg-red-700 text-white transition-colors">Delete</button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
