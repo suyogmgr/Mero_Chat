@@ -3,11 +3,14 @@ import json
 from django.shortcuts import redirect, render, get_object_or_404
 from django.contrib.auth.models import User
 from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
+from django_ratelimit.decorators import ratelimit
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.db import models
-from chat.models import ChatMessage, FriendRequest
+from django.utils.http import url_has_allowed_host_and_scheme
+from chat.models import ChatMessage, FriendRequest, OnlineUser, UserProfile
 
 
 def get_friend_status(request_user, target_user):
@@ -35,10 +38,12 @@ def landing_view(request):
     user_list = []
     for u in users:
         status = get_friend_status(request.user, u)
+        avatar = get_avatar_url(u)
         info = {
             'id': u.id,
             'username': u.username,
-            'is_active': u.is_active,
+            'avatar': avatar,
+            'is_online': OnlineUser.objects.filter(user=u).exists(),
             'friend_status': status,
         }
         if status == 'received_pending':
@@ -47,10 +52,39 @@ def landing_view(request):
         user_list.append(info)
 
     pending_requests = FriendRequest.objects.filter(receiver=request.user, status='pending')
+    my_avatar = get_avatar_url(request.user)
 
     return render(request, 'landing.html', {
         'users': user_list,
         'pending_requests': pending_requests,
+        'my_avatar': my_avatar or f"https://api.dicebear.com/7.x/thumbs/svg?seed={request.user.username}",
+    })
+
+
+@login_required(login_url='login')
+def global_chat_view(request):
+    friends = get_friends(request.user)
+    contact_list = []
+
+    for user in friends:
+        room_name = '_'.join(sorted([request.user.username, user.username]))
+        last_msg = ChatMessage.objects.filter(room_name=room_name).order_by('-timestamp').first()
+        avatar = get_avatar_url(user)
+        contact_list.append({
+            "id": user.id,
+            "name": user.username,
+            "avatar": avatar or f"https://api.dicebear.com/7.x/thumbs/svg?seed={user.username}",
+            "status": "Online" if OnlineUser.objects.filter(user=user).exists() else "Offline",
+            "lastMessage": last_msg.content if last_msg else "No messages yet",
+            "message": [],
+            "time": "",
+            "unread": 0,
+        })
+
+    return render(request, 'index.html', {
+        'contacts_json': json.dumps(contact_list),
+        'selected_user_id': 0,
+        'my_avatar': get_avatar_url(request.user) or f"https://api.dicebear.com/7.x/thumbs/svg?seed={request.user.username}",
     })
 
 
@@ -68,12 +102,13 @@ def chat_view(request, user_id):
     for user in friends:
         room_name = '_'.join(sorted([request.user.username, user.username]))
         last_msg = ChatMessage.objects.filter(room_name=room_name).order_by('-timestamp').first()
+        avatar = get_avatar_url(user)
 
         contact_list.append({
             "id": user.id,
             "name": user.username,
-            "avatar": f"https://api.dicebear.com/7.x/thumbs/svg?seed={user.username}",
-            "status": "Online" if user.is_active else "Offline",
+            "avatar": avatar or f"https://api.dicebear.com/7.x/thumbs/svg?seed={user.username}",
+            "status": "Online" if OnlineUser.objects.filter(user=user).exists() else "Offline",
             "lastMessage": last_msg.content if last_msg else "No messages yet",
             "message": [],
             "time": "",
@@ -83,6 +118,7 @@ def chat_view(request, user_id):
     return render(request, 'index.html', {
         'contacts_json': json.dumps(contact_list),
         'selected_user_id': user_id,
+        'my_avatar': get_avatar_url(request.user) or f"https://api.dicebear.com/7.x/thumbs/svg?seed={request.user.username}",
     })
 
 
@@ -145,36 +181,61 @@ def delete_chat(request, user_id):
 @login_required(login_url='login')
 def delete_message(request, message_id):
     msg = get_object_or_404(ChatMessage, id=message_id)
-    room_users = msg.room_name.split('_')
-    if request.user.username not in room_users:
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    if msg.room_name == 'global':
+        if msg.sender != request.user:
+            return JsonResponse({'error': 'Unauthorized'}, status=403)
+    else:
+        room_users = msg.room_name.split('_')
+        if request.user.username not in room_users:
+            return JsonResponse({'error': 'Unauthorized'}, status=403)
     msg.delete()
     return JsonResponse({'success': 'Message deleted'})
 
 
+@login_required(login_url='login')
+def update_avatar(request):
+    if request.method == 'POST':
+        url = request.POST.get('avatar_url', '').strip()
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        profile.avatar_url = url
+        profile.save()
+        return JsonResponse({'success': True, 'avatar_url': url})
+    return JsonResponse({'error': 'POST required'}, status=405)
+
+
+def get_avatar_url(user):
+    try:
+        url = user.profile.avatar_url
+        return url if url else None
+    except UserProfile.DoesNotExist:
+        return None
+
+
+@ratelimit(key='ip', rate='3/m', method='POST')
 def register_view(request):
+    if getattr(request, 'limited', False):
+        return render(request, "register.html", {"error": "Too many attempts. Try again in a minute."})
     if request.method == "POST":
-        username = request.POST.get("username")
-        password1 = request.POST.get("password1")
-        password2 = request.POST.get("password2")
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            email = request.POST.get("email", "")
+            if email:
+                user.email = email
+                user.save()
+            UserProfile.objects.create(user=user)
+            login(request, user)
+            return redirect("landing")
+    else:
+        form = UserCreationForm()
 
-        if User.objects.filter(username=username).exists():
-            return render(request, "register.html", {"error": "User already exists"})
-
-        if password1 != password2:
-            return render(request, "register.html", {"error": "Passwords do not match"})
-
-        if len(password1) < 8:
-            return render(request, "register.html", {"error": "Password must be at least 8 characters"})
-        
-        user = User.objects.create_user(username=username, password=password1)
-        login(request, user)
-        return redirect("landing")
-    
-    return render(request, "register.html")
+    return render(request, "register.html", {"form": form})
 
 
+@ratelimit(key='ip', rate='5/m', method='POST')
 def login_view(request):
+    if getattr(request, 'limited', False):
+        return render(request, "login.html", {"error": "Too many attempts. Try again in a minute."})
     if request.user.is_authenticated:
         return redirect('landing')
 
@@ -186,8 +247,10 @@ def login_view(request):
         if user is not None:
             login(request, user)
             messages.success(request, f"Welcome back, {username}!")
-            next_url = request.GET.get('next', 'landing')
-            return redirect(next_url)
+            next_url = request.GET.get('next')
+            if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
+                return redirect(next_url)
+            return redirect('landing')
         else:
             messages.error(request, "Invalid username or password")
 

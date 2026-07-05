@@ -23,7 +23,7 @@
       .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(230, 9%, 26%); }
 
       .bubble-me { position: relative; border-bottom-right-radius: 4px !important; }
-      .bubble-me::after { content: ''; position: absolute; bottom: 0; right: -8px; width: 0; height: 0; border: 8px solid transparent; border-left-color: #2563eb; border-bottom-color: #2563eb; }
+      .bubble-me::after { content: ''; position: absolute; bottom: 0; right: -8px; width: 0; height: 0; border: 8px solid transparent; border-left-color: #1d4ed8; border-bottom-color: #1d4ed8; }
       .bubble-them { position: relative; border-bottom-left-radius: 4px !important; }
       .bubble-them::after { content: ''; position: absolute; bottom: 0; left: -8px; width: 0; height: 0; border: 8px solid transparent; border-right-color: hsl(234, 15%, 16%); border-bottom-color: hsl(234, 15%, 16%); }
 
@@ -32,8 +32,10 @@
     <script>
       const dbContacts = {{ contacts_json|safe }};
       const currentUserName = "{{ request.user.username }}";
-      const selectedUserId = {{ selected_user_id }};
+      const selectedUserId = {{ selected_user_id|default:0 }};
       const csrfToken = "{{ csrf_token }}";
+      const myAvatarUrl = "{{ my_avatar }}";
+      dbContacts.unshift({ id: -1, name: "Global Chat", avatar: "https://api.dicebear.com/7.x/thumbs/svg?seed=GlobalChat", status: "Online", message: [], lastMessage: "" });
     </script>
     <script src="{% static 'js/script.js' %}"></script>
   </head>
@@ -44,9 +46,6 @@
           <img src="{% static 'assets/image.png' %}" alt="logo" class="h-12 w-auto rounded-lg" />
         </div>
         <div class="border border-[hsl(230,9%,14%)] p-2 rounded-md shadow-2xl hover:bg-[hsl(234,15%,15%)] transition-colors duration-300">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
-            <path d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z"/>
-          </svg>
         </div>
       </div>
 
@@ -69,7 +68,7 @@
 
       <div class="p-4 border-t shrink-0 border-[hsl(230,9%,14%)] flex items-center space-x-2" id="aside-profile">
         <div>
-          <img src="https://api.dicebear.com/7.x/thumbs/svg?seed={{ request.user.username }}" alt="user-avatar" class="h-12 w-auto rounded-md" />
+          <img id="my-avatar" src="{{ my_avatar }}" alt="user-avatar" class="h-12 w-auto rounded-md" onerror="this.src='https://api.dicebear.com/7.x/thumbs/svg?seed={{ request.user.username }}'" />
         </div>
         <div class="flex flex-col flex-1">
           <span id="aside-username">{{ request.user.username }}</span>
@@ -96,14 +95,9 @@
 
         <div class="flex space-x-4 items-center justify-center">
           <div class="bg-[hsl(234,15%,13%)] rounded-lg p-2 shadow-2xl hover:bg-[hsl(234,15%,15%)] transition-colors duration-300">
-            <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
-              <path d="M798-120q-125 0-247-54.5T329-329Q229-429 174.5-551T120-798q0-18 12-30t30-12h162q14 0 25 9.5t13 22.5l26 140q2 16-1 27t-11 19l-97 98q20 37 47.5 71.5T387-386q31 31 65 57.5t72 48.5l94-94q9-9 23.5-13.5T670-390l138 28q14 4 23 14.5t9 23.5v162q0 18-12 30t-30 12ZM241-600l66-66-17-94h-89q5 41 14 81t26 79Zm358 358q39 17 79.5 27t81.5 13v-88l-94-19-67 67ZM241-600Zm358 358Z"/>
-            </svg>
           </div>
           <div class="bg-[hsl(234,15%,13%)] rounded-lg p-2 shadow-2xl hover:bg-[hsl(234,15%,15%)] transition-colors duration-300">
-            <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
-              <path d="M360-320h80v-120h120v-80H440v-120h-80v120H240v80h120v120ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h480q33 0 56.5 23.5T720-720v180l160-160v440L720-420v180q0 33-23.5 56.5T640-160H160Zm0-80h480v-480H160v480Zm0 0v-480 480Z"/>
-            </svg>
+
           </div>
           <div id="search-msg-btn" class="bg-[hsl(234,15%,13%)] rounded-lg p-2 shadow-2xl hover:bg-[hsl(234,15%,15%)] transition-colors duration-300 cursor-pointer">
             <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
@@ -147,20 +141,29 @@
           </svg>
           <input id="file-input" type="file" accept="image/*" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer">
         </div>
-        <input id="msg-input" class="outline-0 p-2 w-full" type="text" placeholder="Write a message..." class="flex-1" autocomplete="off" />
+        <input id="msg-input" class="outline-0 p-2 w-full flex-1" type="text" placeholder="Write a message..." autocomplete="off" />
         <div id="emoji-btn" class="relative cursor-pointer">
           <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
             <path d="M480-480Zm0 400q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q43 0 83 8.5t77 24.5v90q-35-20-75.5-31.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160q133 0 226.5-93.5T800-480q0-32-6.5-62T776-600h86q9 29 13.5 58.5T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm320-600v-80h-80v-80h80v-80h80v80h80v80h-80v80h-80ZM620-520q25 0 42.5-17.5T680-580q0-25-17.5-42.5T620-640q-25 0-42.5 17.5T560-580q0 25 17.5 42.5T620-520Zm-280 0q25 0 42.5-17.5T400-580q0-25-17.5-42.5T340-640q-25 0-42.5 17.5T280-580q0 25 17.5 42.5T340-520Zm263.5 221.5Q659-337 684-400H276q25 63 80.5 101.5T480-260q68 0 123.5-38.5Z"/>
           </svg>
           <div id="emoji-picker" class="hidden absolute bottom-10 right-0 bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-xl p-3 shadow-2xl z-50" style="width: 300px; height: 250px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;"></div>
         </div>
-        <div id="send-btn" class="bg-blue-600 hover:bg-blue-700 transition-colors duration-300 p-2 rounded-lg shadow-2xl cursor-pointer">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3">
+        <div id="send-btn" class="bg-blue-600 hover:bg-blue-700 transition-all duration-300 p-2 rounded-lg shadow-2xl cursor-pointer group">
+          <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3" class="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
             <path d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z"/>
           </svg>
         </div>
       </div>
     </main>
+
+    <div id="lightbox" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-pointer" onclick="closeLightbox()">
+      <img id="lightbox-img" class="max-w-[90%] max-h-[90%] rounded-lg shadow-2xl cursor-default" onclick="event.stopPropagation()" />
+      <button class="absolute top-4 right-4 text-white text-3xl hover:text-gray-300" onclick="closeLightbox()">&times;</button>
+    </div>
+
+    <button id="scroll-bottom-btn" class="hidden fixed bottom-24 right-8 z-40 w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-full shadow-lg flex items-center justify-center transition-colors" onclick="scrollToBottom()">
+      <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#fff"><path d="M480-344 240-584l56-56 184 184 184-184 56 56-240 240Z"/></svg>
+    </button>
 
     <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div class="bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">

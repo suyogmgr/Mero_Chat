@@ -7,33 +7,65 @@
     <title>py_chat</title>
     <link rel="icon" type="image/png" href="{% static 'assets/image.png' %}">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+      @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+      .card-enter { animation: fadeInUp 0.3s ease-out forwards; opacity: 0; }
+    </style>
   </head>
   <body class="min-h-screen bg-[hsl(232,15%,10%)] text-white">
     <div class="max-w-6xl mx-auto px-6 py-8">
-      <div class="flex items-center justify-between mb-10">
-        <div class="flex items-center gap-4">
-          <img src="{% static 'assets/image.png' %}" alt="logo" class="h-12 w-auto rounded-lg" />
-          <h1 class="text-2xl font-bold">py_chat</h1>
+        <div class="flex items-center justify-between mb-10">
+          <div class="flex items-center gap-4">
+            <img src="{% static 'assets/image.png' %}" alt="logo" class="h-12 w-auto rounded-lg" />
+            <h1 class="text-2xl font-bold">py_chat</h1>
+          </div>
+          <div class="flex items-center gap-4">
+            <img id="nav-avatar" src="{{ my_avatar }}" alt="avatar" class="h-10 w-10 rounded-lg cursor-pointer hover:opacity-80 transition-opacity" onclick="toggleSettings()" onerror="this.src='https://api.dicebear.com/7.x/thumbs/svg?seed={{ request.user.username }}'" />
+            <span class="text-gray-400">Welcome, <span class="text-white font-medium">{{ request.user.username }}</span></span>
+            <a href="{% url 'logout' %}" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Logout</a>
+          </div>
         </div>
-        <div class="flex items-center gap-4">
-          <span class="text-gray-400">Welcome, <span class="text-white font-medium">{{ request.user.username }}</span></span>
-          <a href="{% url 'logout' %}" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Logout</a>
+
+        <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div class="bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold text-white">Settings</h3>
+              <button onclick="toggleSettings()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+            <div class="flex flex-col items-center mb-4">
+              <img id="settings-avatar" src="{{ my_avatar }}" alt="avatar" class="h-24 w-24 rounded-xl mb-3 object-cover" onerror="this.src='https://api.dicebear.com/7.x/thumbs/svg?seed={{ request.user.username }}'" />
+              <span class="text-sm font-medium">{{ request.user.username }}</span>
+            </div>
+            <label class="text-sm text-gray-400 mb-1 block">Profile Picture URL</label>
+            <input id="avatar-url-input" type="url" placeholder="https://example.com/avatar.jpg" class="w-full p-2.5 bg-[hsl(234,15%,10%)] border border-[hsl(230,9%,14%)] rounded-lg text-white text-sm outline-none focus:border-blue-500 transition mb-4" value="" />
+            <div class="flex gap-2">
+              <button onclick="saveAvatar()" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-medium transition-colors">Save</button>
+              <button onclick="resetAvatar()" class="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm transition-colors">Reset</button>
+            </div>
+          </div>
         </div>
-      </div>
 
       {% if pending_requests %}
       <div class="mb-10">
-        <h2 class="text-2xl font-bold mb-4">Pending Friend Requests</h2>
+        <div class="flex items-center gap-3 mb-4">
+          <h2 class="text-2xl font-bold">Friend Requests</h2>
+          <span class="bg-amber-500/20 text-amber-400 text-xs font-medium px-2.5 py-1 rounded-full">{{ pending_requests|length }} pending</span>
+        </div>
         <div class="space-y-3">
           {% for req in pending_requests %}
-          <div class="bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-xl p-4 flex items-center justify-between">
+          <div class="bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-xl p-4 flex items-center justify-between hover:border-amber-500/30 transition-all duration-300">
             <div class="flex items-center gap-4">
-              <img src="https://api.dicebear.com/7.x/thumbs/svg?seed={{ req.sender.username }}" alt="{{ req.sender.username }}" class="h-12 w-12 rounded-lg" />
-              <span class="text-lg font-medium">{{ req.sender.username }}</span>
+              <div class="relative">
+                <img src="https://api.dicebear.com/7.x/thumbs/svg?seed={{ req.sender.username }}" alt="{{ req.sender.username }}" class="h-12 w-12 rounded-lg" />
+              </div>
+              <div>
+                <span class="text-lg font-medium">{{ req.sender.username }}</span>
+                <p class="text-xs text-gray-500">Wants to be friends</p>
+              </div>
             </div>
-            <div class="flex items-center gap-3">
-              <button onclick="acceptRequest({{ req.id }})" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Accept</button>
-              <button onclick="rejectRequest({{ req.id }})" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Reject</button>
+            <div class="flex items-center gap-2">
+              <button onclick="acceptRequest({{ req.id }})" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-300">Accept</button>
+              <button onclick="rejectRequest({{ req.id }})" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition-colors duration-300">Reject</button>
             </div>
           </div>
           {% endfor %}
@@ -41,19 +73,33 @@
       </div>
       {% endif %}
 
+      <div class="mb-6">
+        <a href="{% url 'global_chat' %}" class="inline-flex items-center gap-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 shadow-lg shadow-blue-600/20 group">
+          <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#fff" class="transition-transform duration-200 group-hover:scale-110"><path d="M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm160-400h480v-80H240v80Zm0-160h480v-80H240v80Z"/></svg>
+          <span>Global Chat</span>
+          <span class="text-blue-200 text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200">Join the conversation</span>
+        </a>
+      </div>
+
       <h2 class="text-3xl font-bold mb-2">Find People</h2>
       <p class="text-gray-400 mb-4">Send friend requests to start chatting</p>
 
-      <input id="user-search" type="text" placeholder="Search users..." autocomplete="off" class="w-full p-3 mb-6 bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-lg text-white outline-none focus:border-blue-500 transition" oninput="filterUsers()" />
+      <div class="relative mb-6">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="currentColor"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>
+        <input id="user-search" type="text" placeholder="Search users..." autocomplete="off" class="w-full p-3 pl-10 bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-lg text-white outline-none focus:border-blue-500 transition" oninput="filterUsers()" />
+      </div>
 
       <div id="user-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {% for user in users %}
-          <div class="user-card bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-2xl p-6 hover:border-blue-500/30 transition-all duration-300" data-username="{{ user.username|lower }}">
+          <div class="user-card bg-[hsl(234,15%,13%)] border border-[hsl(230,9%,14%)] rounded-2xl p-6 hover:border-blue-500/50 hover:-translate-y-0.5 transition-all duration-300 card-enter" style="animation-delay:{{ forloop.counter0 }}0ms" data-username="{{ user.username|lower }}">
             <div class="flex flex-col items-center text-center">
-              <img src="https://api.dicebear.com/7.x/thumbs/svg?seed={{ user.username }}" alt="{{ user.username }}" class="h-20 w-20 rounded-xl mb-4 shadow-lg" />
+              <div class="relative mb-4">
+                <img src="{% if user.avatar %}{{ user.avatar }}{% else %}https://api.dicebear.com/7.x/thumbs/svg?seed={{ user.username }}{% endif %}" alt="{{ user.username }}" class="h-20 w-20 rounded-xl shadow-lg" onerror="this.src='https://api.dicebear.com/7.x/thumbs/svg?seed={{ user.username }}'" />
+                <span class="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full border-2 border-[hsl(232,15%,10%)] {% if user.is_online %}bg-green-500{% else %}bg-gray-500{% endif %}"></span>
+              </div>
               <h3 class="text-lg font-semibold">{{ user.username }}</h3>
-              <span class="text-sm {% if user.is_active %}text-green-400{% else %}text-gray-500{% endif %} mt-1">
-                {% if user.is_active %}● Online{% else %}○ Offline{% endif %}
+              <span class="text-xs {% if user.is_online %}text-green-400{% else %}text-gray-500{% endif %}">
+                {% if user.is_online %}Online{% else %}Offline{% endif %}
               </span>
 
               <div class="mt-4 w-full">
@@ -72,11 +118,15 @@
           </div>
         {% empty %}
           <div class="col-span-full text-center py-20" id="no-users-msg">
+            <svg class="mx-auto mb-4 text-gray-600" xmlns="http://www.w3.org/2000/svg" height="48px" viewBox="0 -960 960 960" width="48px" fill="currentColor"><path d="M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Z"/></svg>
             <p class="text-gray-500 text-lg">No other users found.</p>
+            <p class="text-gray-600 text-sm mt-1">Invite friends to join!</p>
           </div>
         {% endfor %}
         <div class="col-span-full text-center py-20 hidden" id="no-search-results">
+          <svg class="mx-auto mb-4 text-gray-600" xmlns="http://www.w3.org/2000/svg" height="48px" viewBox="0 -960 960 960" width="48px" fill="currentColor"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>
           <p class="text-gray-500 text-lg">No users match your search.</p>
+          <p class="text-gray-600 text-sm mt-1">Try a different name</p>
         </div>
       </div>
     </div>
@@ -92,6 +142,35 @@
     {% endif %}
 
     <script>
+      const currentAvatar = "{{ my_avatar }}";
+
+      function toggleSettings() {
+        const modal = document.getElementById('settings-modal');
+        modal.classList.toggle('hidden');
+        if (!modal.classList.contains('hidden')) {
+          document.getElementById('avatar-url-input').value = currentAvatar.startsWith('https://api.dicebear') ? '' : currentAvatar;
+        }
+      }
+
+      function saveAvatar() {
+        const url = document.getElementById('avatar-url-input').value.trim();
+        const formData = new FormData();
+        formData.append('avatar_url', url);
+        fetch("{% url 'update_avatar' %}", { method: 'POST', headers: { 'X-CSRFToken': "{{ csrf_token }}" }, body: formData })
+          .then(r => r.json())
+          .then(d => {
+            if (d.success) {
+              document.querySelectorAll('[id$="-avatar"]').forEach(img => img.src = d.avatar_url || currentAvatar);
+              document.getElementById('settings-modal').classList.add('hidden');
+            }
+          });
+      }
+
+      function resetAvatar() {
+        document.getElementById('avatar-url-input').value = '';
+        saveAvatar();
+      }
+
       function filterUsers() {
         const q = document.getElementById('user-search').value.toLowerCase();
         let visible = 0;

@@ -30,3 +30,18 @@ class FriendRequest(models.Model):
 
     def __str__(self):
         return f'{self.sender.username} -> {self.receiver.username} ({self.status})'
+
+
+class OnlineUser(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='online_status')
+
+    def __str__(self):
+        return f'{self.user.username} is online'
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    avatar_url = models.URLField(max_length=500, blank=True, default='')
+
+    def __str__(self):
+        return self.user.username

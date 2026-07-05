@@ -5,6 +5,9 @@
 {% block form_header %}Welcome Back{% endblock %}
 
 {% block auth_content %}
+    {% if error %}
+        <div class="p-3 rounded-lg text-sm bg-red-500/20 text-red-400 border border-red-500/30">{{ error }}</div>
+    {% endif %}
     <div>
         <label for="username" class="block text-sm font-medium text-gray-300 mb-2">Username</label>
         <input type="text" name="username" id="username" required

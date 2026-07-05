@@ -3,7 +3,17 @@ function isImage(url) {
 }
 
 function getRoomName(user1, user2) {
+  if (user2 === "Global Chat") return "global";
   return [user1, user2].sort().join('_');
+}
+
+function openLightbox(src) {
+  const lb = document.getElementById('lightbox');
+  document.getElementById('lightbox-img').src = src;
+  lb.classList.remove('hidden');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.add('hidden');
 }
 
 function initialsAvatar(img, name) {
@@ -79,7 +89,10 @@ function connectToRoom(contactName) {
         });
         renderChat();
         renderContacts();
-        if (data.username !== currentUserName && !document.hasFocus()) playNotification();
+        if (data.username !== currentUserName) {
+          if (!document.hasFocus()) playNotification();
+          sendReadReceipt();
+        }
         break;
 
       case 'delete_message':
@@ -101,6 +114,18 @@ function connectToRoom(contactName) {
 
       case 'presence':
         updateContactPresence(data.username, data.status);
+        break;
+
+      case 'read_receipt':
+        if (data.username !== currentUserName) {
+          for (let i = activeContact.message.length - 1; i >= 0; i--) {
+            if (activeContact.message[i].from === "me") {
+              activeContact.message[i].seen = true;
+              break;
+            }
+          }
+          renderChat();
+        }
         break;
     }
   };
@@ -201,8 +226,8 @@ function renderContacts() {
             <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[hsl(234,15%,13%)] ${c.status === 'Online' ? 'bg-green-500' : 'bg-gray-500'}"></span>
           </div>
           <div class="flex flex-col flex-1 gap-0.5 min-w-0">
-            <span class="text-sm font-medium truncate">${c.name}</span>
-            <span class="text-[11px] text-gray-400 truncate">${c.message?.at(-1)?.text || ""}</span>
+            <span class="text-[15px] font-semibold truncate">${c.name}</span>
+            <span class="text-xs text-gray-500 truncate">${c.message?.at(-1)?.text || ""}</span>
           </div>
           <div class="flex flex-col ml-auto gap-1 items-center shrink-0">
             <span class="text-[10px] text-gray-500">${c.message?.at(-1)?.time || ""}</span>
@@ -219,35 +244,41 @@ function renderChat() {
   document.getElementById("chat-username").textContent = activeContact.name;
   document.getElementById("chat-status").textContent = activeContact.status;
   const avatar = document.getElementById("chat-avatar");
-  avatar.src = activeContact.avatar;
   avatar.onerror = () => initialsAvatar(avatar, activeContact.name);
+  avatar.src = activeContact.avatar;
 
   const container = document.getElementById("chat-message");
   const messages = activeContact.message;
 
   if (messages.length === 0) {
+    const isGlobal = activeContact.name === "Global Chat";
     container.innerHTML = `<div id="empty-chat" class="flex flex-col items-center justify-center h-full text-gray-500">
       <svg xmlns="http://www.w3.org/2000/svg" height="64px" viewBox="0 -960 960 960" width="64px" fill="currentColor" class="mb-4 opacity-40">
-        <path d="M240-400h320v-80H240v80Zm0-120h480v-80H240v80Zm0-120h480v-80H240v80ZM80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z"/>
+        ${isGlobal ? '<path d="M80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm160-320h480v-80H240v80Zm0-160h480v-80H240v80Zm0-160h480v-80H240v80Z"/>' : '<path d="M240-400h320v-80H240v80Zm0-120h480v-80H240v80Zm0-120h480v-80H240v80ZM80-80v-720q0-33 23.5-56.5T160-880h640q33 0 56.5 23.5T880-800v480q0 33-23.5 56.5T800-240H240L80-80Zm126-240h594v-480H160v525l46-45Zm-46 0v-480 480Z"/>'}
       </svg>
-      <p class="text-lg font-medium">No messages yet</p>
-      <p class="text-sm mt-1">Send a message to start the conversation</p>
+      <p class="text-lg font-medium">${isGlobal ? 'No messages in global chat' : 'No messages yet'}</p>
+      <p class="text-sm mt-1">${isGlobal ? 'Be the first to say something!' : 'Send a message to start the conversation'}</p>
     </div>`;
     return;
   }
 
   container.innerHTML = messages
     .map((m, i) => `
-      <div class="flex ${m.from === "me" ? "justify-end" : "justify-start"} mb-2 msg-animate">
-        <div class="max-w-[70%] px-4 py-2.5 rounded-xl text-sm leading-relaxed group relative ${m.from === "me" ? "bg-blue-600 text-white bubble-me" : "bg-[hsl(234,15%,16%)] bubble-them"}">
-          ${isImage(m.text) ? `<img src="${m.text}" class="max-w-full max-h-64 rounded-lg" />` : m.text.replace(/\n/g, '<br>')}
-          ${m.time ? `<div class="text-[10px] mt-1.5 ${m.from === "me" ? "text-blue-200" : "text-gray-400"}">${m.time}</div>` : ""}
+      <div class="flex ${m.from === "me" ? "justify-end" : "justify-start"} mb-1 msg-animate">
+        <div class="max-w-[70%] px-4 py-2.5 rounded-xl text-sm leading-relaxed group relative break-words transition-all duration-150 hover:brightness-110 ${m.from === "me" ? "bg-gradient-to-br from-blue-500 to-blue-700 text-white bubble-me" : "bg-[hsl(234,15%,16%)] bubble-them"}">
+          ${isImage(m.text) ? `<img src="${m.text}" class="max-w-full max-h-64 rounded-lg block cursor-pointer lightbox-img" />` : m.text.replace(/\n/g, '<br>')}
+          <div class="flex items-center gap-1 mt-1.5 ${m.from === "me" ? "justify-end" : "justify-start"}">
+            ${m.time ? `<span class="text-[10px] ${m.from === "me" ? "text-blue-200" : "text-gray-400"}">${m.time}</span>` : ""}
+            ${m.from === "me" && m.seen ? `<span class="text-[10px] text-blue-300">Seen</span>` : ""}
+          </div>
           ${m.id ? `<button onclick="deleteSingleMessage(${m.id})" class="hidden group-hover:flex absolute -top-2 -right-2 items-center justify-center w-5 h-5 bg-gray-700 hover:bg-red-500 rounded-full transition-colors" title="Delete"><svg xmlns="http://www.w3.org/2000/svg" height="12px" viewBox="0 -960 960 960" width="12px" fill="#e3e3e3"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg></button>` : ''}
         </div>
       </div>`)
     .join("");
 
-  container.scrollTop = container.scrollHeight;
+  if (autoScroll) {
+    container.scrollTop = container.scrollHeight;
+  }
 }
 
 function selectContact(id) {
@@ -281,8 +312,15 @@ function sendMessage() {
   setTimeout(() => btn.classList.remove("pulse"), 200);
 }
 
-let deleteTargetId = null;
 let searchOpen = false;
+let autoScroll = true;
+
+function scrollToBottom() {
+  const c = document.getElementById('chat-message');
+  c.scrollTop = c.scrollHeight;
+  autoScroll = true;
+  document.getElementById('scroll-bottom-btn').classList.add('hidden');
+}
 
 function toggleSearch() {
   searchOpen = !searchOpen;
@@ -341,7 +379,7 @@ function deleteSingleMessage(msgId) {
 }
 
 function deleteChat() {
-  if (!activeContact) return;
+  if (!activeContact || activeContact.id === -1) return;
   showConfirm('Delete all messages with ' + activeContact.name + '? This cannot be undone.', () => {
     fetch('/delete-chat/' + activeContact.id + '/', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
       .then(r => r.json())
@@ -456,6 +494,20 @@ document.addEventListener("DOMContentLoaded", () => {
     activeContact = targetContact;
     connectToRoom(activeContact.name);
   }
+
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+  document.getElementById('chat-message').addEventListener('click', function(e) {
+    if (e.target.classList.contains('lightbox-img')) {
+      openLightbox(e.target.src);
+    }
+  });
+
+  const chatMsg = document.getElementById('chat-message');
+  chatMsg.addEventListener('scroll', () => {
+    const atBottom = chatMsg.scrollHeight - chatMsg.scrollTop - chatMsg.clientHeight < 60;
+    autoScroll = atBottom;
+    document.getElementById('scroll-bottom-btn').classList.toggle('hidden', atBottom);
+  });
 
   renderContacts();
   renderChat();

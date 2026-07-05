@@ -1,9 +1,13 @@
 import json
+import logging
 from datetime import datetime
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
-from .models import ChatMessage
+from .models import ChatMessage, FriendRequest, OnlineUser
 from django.contrib.auth.models import User
+from .crypto import encrypt, decrypt
+
+logger = logging.getLogger(__name__)
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -16,30 +20,44 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
-        users = self.room_name.split('_')
-        if self.username not in users:
-            await self.close()
-            return
+        self.is_global = self.room_name == 'global'
 
-        self.other_username = next(u for u in users if u != self.username)
-        self.presence_group = f'presence_{self.other_username}'
+        if self.is_global:
+            self.other_username = None
+            self.presence_group = None
+        else:
+            users = self.room_name.split('_')
+            if self.username not in users:
+                await self.close()
+                return
+            self.other_username = next(u for u in users if u != self.username)
+            if not await self.are_friends(self.username, self.other_username):
+                await self.close()
+                return
+            self.presence_group = f'presence_{self.other_username}'
 
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-        await self.channel_layer.group_add(self.presence_group, self.channel_name)
+
+        if self.presence_group:
+            await self.channel_layer.group_add(self.presence_group, self.channel_name)
+
         await self.accept()
 
+        await self.set_online(True)
         await self.send_message_history()
 
-        await self.channel_layer.group_send(
-            self.presence_group, {
-                'type': 'presence_update',
-                'username': self.username,
-                'status': 'online'
-            }
-        )
+        if self.presence_group:
+            await self.channel_layer.group_send(
+                self.presence_group, {
+                    'type': 'presence_update',
+                    'username': self.username,
+                    'status': 'online'
+                }
+            )
 
     async def disconnect(self, close_code):
-        if hasattr(self, 'presence_group'):
+        await self.set_online(False)
+        if getattr(self, 'presence_group', None):
             await self.channel_layer.group_send(
                 self.presence_group, {
                     'type': 'presence_update',
@@ -167,41 +185,85 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     @sync_to_async
+    def are_friends(self, username1, username2):
+        try:
+            return FriendRequest.objects.filter(
+                sender__username=username1, receiver__username=username2, status='accepted'
+            ).exists() or FriendRequest.objects.filter(
+                sender__username=username2, receiver__username=username1, status='accepted'
+            ).exists()
+        except Exception as e:
+            logger.error(f"are_friends error: {e}")
+            return False
+
+    @sync_to_async
+    def set_online(self, online):
+        try:
+            user = User.objects.get(username=self.username)
+            if online:
+                OnlineUser.objects.get_or_create(user=user)
+            else:
+                OnlineUser.objects.filter(user=user).delete()
+        except User.DoesNotExist:
+            logger.warning(f"set_online: user {self.username} not found")
+        except Exception as e:
+            logger.error(f"set_online error: {e}")
+
+    @sync_to_async
     def save_message(self, username, room, message):
         try:
             user = User.objects.get(username=username)
-            msg = ChatMessage.objects.create(sender=user, room_name=room, content=message)
+            msg = ChatMessage.objects.create(sender=user, room_name=room, content=encrypt(message))
             return msg.id
         except User.DoesNotExist:
+            logger.warning(f"save_message: user {username} not found")
+            return None
+        except Exception as e:
+            logger.error(f"save_message error: {e}")
             return None
 
     @sync_to_async
     def delete_message_db(self, msg_id, username):
         try:
             msg = ChatMessage.objects.get(id=msg_id)
-            users = msg.room_name.split('_')
-            if username not in users:
-                return False
+            if msg.room_name == 'global':
+                if msg.sender.username != username:
+                    return False
+            else:
+                users = msg.room_name.split('_')
+                if username not in users:
+                    return False
             msg.delete()
             return True
         except ChatMessage.DoesNotExist:
             return False
+        except Exception as e:
+            logger.error(f"delete_message_db error: {e}")
+            return False
 
     @sync_to_async
     def get_message_history(self):
-        messages = ChatMessage.objects.filter(
-            room_name=self.room_name
-        ).order_by('timestamp')[:50]
+        try:
+            messages = ChatMessage.objects.filter(
+                room_name=self.room_name
+            ).order_by('timestamp')[:50]
 
-        return [
-            {
-                'id': msg.id,
-                'message': msg.content,
-                'username': msg.sender.username,
-                'timestamp': msg.timestamp.isoformat()
-            }
-            for msg in messages
-        ]
+            result = []
+            for msg in messages:
+                try:
+                    plain = decrypt(msg.content)
+                except Exception:
+                    plain = "[encrypted message]"
+                result.append({
+                    'id': msg.id,
+                    'message': plain,
+                    'username': msg.sender.username,
+                    'timestamp': msg.timestamp.isoformat()
+                })
+            return result
+        except Exception as e:
+            logger.error(f"get_message_history error: {e}")
+            return []
 
     async def send_message_history(self):
         history = await self.get_message_history()

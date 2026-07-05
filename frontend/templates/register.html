@@ -5,6 +5,14 @@
 {% block form_header %}Create Your Account{% endblock %}
 
 {% block auth_content %}
+    {% if error %}
+        <div class="p-3 rounded-lg text-sm bg-red-500/20 text-red-400 border border-red-500/30">{{ error }}</div>
+    {% endif %}
+    {% if form.non_field_errors %}
+        {% for error in form.non_field_errors %}
+            <div class="p-3 rounded-lg text-sm bg-red-500/20 text-red-400 border border-red-500/30">{{ error }}</div>
+        {% endfor %}
+    {% endif %}
     <div>
         <label for="username" class="block text-sm font-medium text-gray-300 mb-2">Username</label>
         <input type="text" name="username" id="username" required
