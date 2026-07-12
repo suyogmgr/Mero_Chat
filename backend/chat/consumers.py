@@ -10,6 +10,28 @@ from .crypto import encrypt, decrypt
 logger = logging.getLogger(__name__)
 
 
+@sync_to_async
+def set_online_user(username, online):
+    try:
+        user = User.objects.get(username=username)
+        if online:
+            entry, created = OnlineUser.objects.get_or_create(user=user, defaults={'connections': 0})
+            entry.connections += 1
+            entry.save()
+        else:
+            entry = OnlineUser.objects.filter(user=user).first()
+            if entry:
+                entry.connections = max(0, entry.connections - 1)
+                if entry.connections == 0:
+                    entry.delete()
+                else:
+                    entry.save()
+    except User.DoesNotExist:
+        logger.warning(f"set_online_user: user {username} not found")
+    except Exception as e:
+        logger.error(f"set_online_user error: {e}")
+
+
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_name = self.scope['url_route']['kwargs']['room_name']
@@ -196,18 +218,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.error(f"are_friends error: {e}")
             return False
 
-    @sync_to_async
-    def set_online(self, online):
-        try:
-            user = User.objects.get(username=self.username)
-            if online:
-                OnlineUser.objects.get_or_create(user=user)
-            else:
-                OnlineUser.objects.filter(user=user).delete()
-        except User.DoesNotExist:
-            logger.warning(f"set_online: user {self.username} not found")
-        except Exception as e:
-            logger.error(f"set_online error: {e}")
+    async def set_online(self, online):
+        await set_online_user(self.username, online)
 
     @sync_to_async
     def save_message(self, username, room, message):
@@ -270,4 +282,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'history',
             'messages': history
+        }))
+
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.username = self.scope['user'].username
+        if self.scope['user'].is_anonymous:
+            await self.close()
+            return
+        self.group_name = f'notifications_{self.username}'
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+        await set_online_user(self.username, True)
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        await set_online_user(self.username, False)
+
+    async def receive(self, text_data):
+        pass
+
+    async def friend_request_notification(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'friend_request',
+            'from': event['from'],
+            'action': event['action'],
         }))

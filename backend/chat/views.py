@@ -10,6 +10,8 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.db import models
 from django.utils.http import url_has_allowed_host_and_scheme
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 from chat.models import ChatMessage, FriendRequest, OnlineUser, UserProfile
 
 
@@ -18,10 +20,18 @@ def get_friend_status(request_user, target_user):
         return 'self'
     sent = FriendRequest.objects.filter(sender=request_user, receiver=target_user).first()
     if sent:
-        return sent.status if sent.status == 'accepted' else 'sent_pending'
+        if sent.status == 'accepted':
+            return 'accepted'
+        if sent.status == 'rejected':
+            return 'none'
+        return 'sent_pending'
     received = FriendRequest.objects.filter(sender=target_user, receiver=request_user).first()
     if received:
-        return 'accepted' if received.status == 'accepted' else 'received_pending'
+        if received.status == 'accepted':
+            return 'accepted'
+        if received.status == 'rejected':
+            return 'none'
+        return 'received_pending'
     return 'none'
 
 
@@ -32,8 +42,9 @@ def get_friends(user):
     return User.objects.filter(id__in=friend_ids)
 
 
-@login_required(login_url='login')
 def landing_view(request):
+    if not request.user.is_authenticated:
+        return render(request, 'welcome.html')
     users = User.objects.exclude(username=request.user.username)
     user_list = []
     for u in users:
@@ -141,6 +152,11 @@ def send_friend_request(request, user_id):
         existing.delete()
 
     FriendRequest.objects.create(sender=request.user, receiver=receiver)
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'notifications_{receiver.username}',
+        {'type': 'friend_request_notification', 'from': request.user.username, 'action': 'request_received'}
+    )
     return JsonResponse({'success': 'Friend request sent'})
 
 
@@ -149,6 +165,11 @@ def accept_friend_request(request, request_id):
     req = get_object_or_404(FriendRequest, id=request_id, receiver=request.user, status='pending')
     req.status = 'accepted'
     req.save()
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'notifications_{req.sender.username}',
+        {'type': 'friend_request_notification', 'from': request.user.username, 'action': 'request_accepted'}
+    )
     return JsonResponse({'success': 'Friend request accepted'})
 
 
